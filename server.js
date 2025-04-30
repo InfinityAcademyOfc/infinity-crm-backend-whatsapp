@@ -32,4 +32,8 @@ app.get('/', (req, res) => {
 // Inicialização
 app.listen(process.env.PORT || 3000, () => {
   console.log(`✅ Servidor iniciado: http://localhost:${process.env.PORT || 3000}`);
+  
+  // WhatsApp (Baileys)
+const startWhatsApp = require('./whatsapp');
+startWhatsApp();
 });
