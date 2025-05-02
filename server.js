@@ -7,6 +7,7 @@ app.use(cors());
 app.use(express.json());
 
 // Rotas do Infinity CRM + WhatsApp
+app.use('/sessions', require('./routes/sessions'));
 app.use('/profiles', require('./routes/profiles'));
 app.use('/companies', require('./routes/companies'));
 app.use('/config', require('./routes/config'));
