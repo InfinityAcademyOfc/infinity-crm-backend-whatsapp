@@ -1,9 +1,12 @@
-const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const path = require('path');
 const fs = require('fs');
+const makeWASocket = require('@whiskeysockets/baileys').default;
+const { useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const sessions = new Map(); // Mapa global de sessões
 
-async function startWhatsApp() {
-  const authFolder = path.resolve(__dirname, 'auth');
+async function startSession(sessionId) {
+  const authFolder = path.resolve(__dirname, 'auth', sessionId);
+
   const { state, saveCreds } = await useMultiFileAuthState(authFolder);
   const { version } = await fetchLatestBaileysVersion();
 
@@ -13,14 +16,15 @@ async function startWhatsApp() {
     printQRInTerminal: true,
   });
 
+  // Eventos
   sock.ev.on('creds.update', saveCreds);
 
   sock.ev.on('connection.update', ({ connection }) => {
     if (connection === 'open') {
-      console.log('✅ WhatsApp conectado com sucesso!');
+      console.log(`✅ Sessão "${sessionId}" conectada com sucesso!`);
     } else if (connection === 'close') {
-      console.log('⚠️ Conexão encerrada. Tentando reconectar...');
-      startWhatsApp(); // Tenta reconectar
+      console.log(`⚠️ Sessão "${sessionId}" desconectada. Reconectando...`);
+      startSession(sessionId);
     }
   });
 
@@ -30,9 +34,18 @@ async function startWhatsApp() {
 
     const sender = msg.key.remoteJid;
     const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
-
-    console.log(`📩 Mensagem de ${sender}: ${text}`);
+    console.log(`📩 [${sessionId}] Mensagem de ${sender}: ${text}`);
   });
+
+  sessions.set(sessionId, sock);
 }
 
-module.exports = startWhatsApp;
+// Função para pegar a instância
+function getSession(sessionId) {
+  return sessions.get(sessionId);
+}
+
+module.exports = {
+  startSession,
+  getSession
+};
