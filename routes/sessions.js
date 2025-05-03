@@ -2,11 +2,17 @@ const express = require('express');
 const router = express.Router();
 const { startSession, getQRCode } = require('../controllers/whatsappController');
 
-// Iniciar uma sessão do WhatsApp
-router.post('/:id/start', (req, res) => {
+// Iniciar uma sessão do WhatsApp manualmente
+router.post('/:id/start', async (req, res) => {
   const { id } = req.params;
-  startSession(id);
-  res.status(200).json({ message: `Sessão ${id} iniciada.` });
+
+  try {
+    await startSession(id);
+    res.status(200).json({ message: `Sessão ${id} iniciada com sucesso.` });
+  } catch (error) {
+    console.error(`Erro ao iniciar sessão ${id}:`, error);
+    res.status(500).json({ error: 'Erro ao iniciar sessão', details: error.message });
+  }
 });
 
 // Obter o QR Code da sessão
