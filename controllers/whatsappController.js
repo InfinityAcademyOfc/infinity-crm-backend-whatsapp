@@ -7,7 +7,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 const sessions = {};
 const qrCodes = {};
-const sessionStatus = {}; // 🔁 Status da sessão: not_started | qr | connected | disconnected
+const sessionStatus = {}; // Memória volátil: not_started | qr | connected | disconnected
 
 // Inicia uma nova sessão ou retorna se já existir
 async function startSession(sessionId) {
@@ -40,7 +40,7 @@ async function startSession(sessionId) {
 
         await supabase
           .from('whatsapp_sessions')
-          .upsert({ session_id: sessionId, status: 'waiting_qr' }, { onConflict: 'session_id' });
+          .upsert({ session_id: sessionId, status: 'qr' }, { onConflict: 'session_id' });
       }
 
       if (connection === 'open') {
@@ -104,7 +104,7 @@ async function getQRCode(req, res) {
     }
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
-    return res.json({ qrCode: qrUrl });
+    return res.json({ qr: qrUrl });
 
   } catch (error) {
     console.error(`❌ Erro ao recuperar QR Code da sessão ${sessionId}:`, error);
@@ -112,10 +112,27 @@ async function getQRCode(req, res) {
   }
 }
 
-function getSessionStatus(req, res) {
+async function getSessionStatus(req, res) {
   const { id } = req.params;
-  const status = sessionStatus[id] || 'not_started';
-  res.json({ status });
+
+  // Tenta buscar da memória
+  if (sessionStatus[id]) {
+    return res.json({ status: sessionStatus[id] });
+  }
+
+  // Se não estiver na memória, busca do Supabase
+  const { data, error } = await supabase
+    .from('whatsapp_sessions')
+    .select('status')
+    .eq('session_id', id)
+    .single();
+
+  if (error) {
+    console.error("Erro ao buscar status no Supabase:", error);
+    return res.status(500).json({ status: 'error' });
+  }
+
+  return res.json({ status: data?.status || 'not_started' });
 }
 
 module.exports = { startSession, getQRCode, getSessionStatus };
