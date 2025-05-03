@@ -83,4 +83,20 @@ async function getQRCode(req, res) {
   }
 }
 
-module.exports = { startSession, getQRCode };
+function getSessionStatus(req, res) {
+  const { id } = req.params;
+  const session = sessions[id];
+
+  if (!session) {
+    return res.status(404).json({ status: 'not_started' });
+  }
+
+  const isConnected = session?.user && session?.user.id;
+
+  res.json({
+    status: isConnected ? 'connected' : 'waiting_qr',
+  });
+}
+
+module.exports = { startSession, getQRCode, getSessionStatus };
+
