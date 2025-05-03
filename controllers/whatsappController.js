@@ -1,9 +1,9 @@
-// controllers/whatsappController.js
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const path = require('path');
 
 const sessions = {};
 const qrCodes = {};
+const sessionStatus = {}; // 🔁 Status da sessão: not_started | qr | connected | disconnected
 
 // Inicia uma nova sessão ou retorna se já existir
 async function startSession(sessionId) {
@@ -24,21 +24,25 @@ async function startSession(sessionId) {
     });
 
     sessions[sessionId] = sock;
+    sessionStatus[sessionId] = 'starting';
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async ({ connection, qr }) => {
       if (qr) {
         qrCodes[sessionId] = qr;
+        sessionStatus[sessionId] = 'qr';
         console.log(`📱 Novo QR Code gerado para sessão ${sessionId}`);
       }
 
       if (connection === 'open') {
+        sessionStatus[sessionId] = 'connected';
         console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
       } else if (connection === 'close') {
+        sessionStatus[sessionId] = 'disconnected';
         console.log(`⚠️ Sessão ${sessionId} desconectada. Reconectando...`);
         delete sessions[sessionId];
-        await startSession(sessionId);
+        await startSession(sessionId); // tenta reconectar automaticamente
       }
     });
 
@@ -54,6 +58,7 @@ async function startSession(sessionId) {
 
   } catch (error) {
     console.error(`❌ Erro ao iniciar sessão ${sessionId}:`, error);
+    sessionStatus[sessionId] = 'error';
     throw error;
   }
 }
@@ -83,20 +88,11 @@ async function getQRCode(req, res) {
   }
 }
 
+// Retorna o status da sessão
 function getSessionStatus(req, res) {
   const { id } = req.params;
-  const session = sessions[id];
-
-  if (!session) {
-    return res.status(404).json({ status: 'not_started' });
-  }
-
-  const isConnected = session?.user && session?.user.id;
-
-  res.json({
-    status: isConnected ? 'connected' : 'waiting_qr',
-  });
+  const status = sessionStatus[id] || 'not_started';
+  res.json({ status });
 }
 
 module.exports = { startSession, getQRCode, getSessionStatus };
-
