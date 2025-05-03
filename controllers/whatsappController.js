@@ -7,12 +7,12 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 const sessions = {};
 const qrCodes = {};
-const sessionStatus = {}; // Memória volátil: not_started | qr | connected | disconnected
+const sessionStatus = {}; // 🔁 Status da sessão: not_started | qr | connected | disconnected
 
 // Inicia uma nova sessão ou retorna se já existir
 async function startSession(sessionId) {
   if (sessions[sessionId]) {
-    console.log(`⚠️ Sessão ${sessionId} já está ativa`);
+    console.log(⚠️ Sessão ${sessionId} já está ativa);
     return;
   }
 
@@ -36,16 +36,16 @@ async function startSession(sessionId) {
       if (qr) {
         qrCodes[sessionId] = qr;
         sessionStatus[sessionId] = 'qr';
-        console.log(`📱 Novo QR Code gerado para sessão ${sessionId}`);
+        console.log(📱 Novo QR Code gerado para sessão ${sessionId});
 
         await supabase
           .from('whatsapp_sessions')
-          .upsert({ session_id: sessionId, status: 'qr' }, { onConflict: 'session_id' });
+          .upsert({ session_id: sessionId, status: 'waiting_qr' }, { onConflict: 'session_id' });
       }
 
       if (connection === 'open') {
         sessionStatus[sessionId] = 'connected';
-        console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
+        console.log(✅ Sessão ${sessionId} conectada com sucesso);
 
         await supabase
           .from('whatsapp_sessions')
@@ -54,7 +54,7 @@ async function startSession(sessionId) {
 
       if (connection === 'close') {
         sessionStatus[sessionId] = 'disconnected';
-        console.log(`⚠️ Sessão ${sessionId} desconectada. Reconectando...`);
+        console.log(⚠️ Sessão ${sessionId} desconectada. Reconectando...);
 
         await supabase
           .from('whatsapp_sessions')
@@ -73,11 +73,11 @@ async function startSession(sessionId) {
       const sender = msg.key.remoteJid;
       const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
 
-      console.log(`📨 Mensagem recebida de ${sender}: ${text}`);
+      console.log(📨 Mensagem recebida de ${sender}: ${text});
     });
 
   } catch (error) {
-    console.error(`❌ Erro ao iniciar sessão ${sessionId}:`, error);
+    console.error(❌ Erro ao iniciar sessão ${sessionId}:, error);
     sessionStatus[sessionId] = 'error';
 
     await supabase
@@ -93,46 +93,29 @@ async function getQRCode(req, res) {
 
   try {
     if (!sessions[sessionId]) {
-      console.log(`🚀 Iniciando nova sessão: ${sessionId}`);
+      console.log(🚀 Iniciando nova sessão: ${sessionId});
       await startSession(sessionId);
     }
 
     const qr = qrCodes[sessionId];
     if (!qr) {
-      console.log(`⏳ QR Code ainda não disponível para: ${sessionId}`);
+      console.log(⏳ QR Code ainda não disponível para: ${sessionId});
       return res.status(202).json({ message: 'QR Code ainda não disponível, aguarde...' });
     }
 
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
-    return res.json({ qr: qrUrl });
+    const qrUrl = https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300;
+    return res.json({ qrCode: qrUrl });
 
   } catch (error) {
-    console.error(`❌ Erro ao recuperar QR Code da sessão ${sessionId}:`, error);
+    console.error(❌ Erro ao recuperar QR Code da sessão ${sessionId}:, error);
     return res.status(500).json({ error: 'Erro ao obter QR Code', details: error.message });
   }
 }
 
-async function getSessionStatus(req, res) {
+function getSessionStatus(req, res) {
   const { id } = req.params;
-
-  // Tenta buscar da memória
-  if (sessionStatus[id]) {
-    return res.json({ status: sessionStatus[id] });
-  }
-
-  // Se não estiver na memória, busca do Supabase
-  const { data, error } = await supabase
-    .from('whatsapp_sessions')
-    .select('status')
-    .eq('session_id', id)
-    .single();
-
-  if (error) {
-    console.error("Erro ao buscar status no Supabase:", error);
-    return res.status(500).json({ status: 'error' });
-  }
-
-  return res.json({ status: data?.status || 'not_started' });
+  const status = sessionStatus[id] || 'not_started';
+  res.json({ status });
 }
 
 module.exports = { startSession, getQRCode, getSessionStatus };
