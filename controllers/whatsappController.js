@@ -104,7 +104,7 @@ async function getQRCode(req, res) {
     }
 
     // Retorna o QR code em formato base64 embed
-    const base64Qr = qr.startsWith("data:image/png;base64,") ? qr : `data:image/png;base64,${qr}`;
+    const base64Qr = qr.startsWith("data:image") ? qr : `data:image/png;base64,${qr}`;
     return res.json({ qrCode: base64Qr });
 
   } catch (error) {
