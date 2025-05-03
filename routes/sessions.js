@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { startSession, getQRCode } = require('../controllers/whatsappController');
+const {
+  startSession,
+  getQRCode,
+  getSessionStatus,
+} = require('../controllers/whatsappController');
 
 // Iniciar uma sessão do WhatsApp manualmente
 router.post('/:id/start', async (req, res) => {
@@ -17,5 +21,8 @@ router.post('/:id/start', async (req, res) => {
 
 // Obter o QR Code da sessão
 router.get('/:id/qrcode', getQRCode);
+
+// Verificar status da sessão (conectado, aguardando QR ou não iniciada)
+router.get('/:id/status', getSessionStatus);
 
 module.exports = router;
