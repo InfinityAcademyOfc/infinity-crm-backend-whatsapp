@@ -1,13 +1,13 @@
 // controllers/whatsappController.js
-const sessions = new Map();
+const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+const path = require('path');
 
-const startSession = async (sessionId, io) => {
-  const { default: makeWASocket, useSingleFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
-  const fs = require('fs');
-  const path = require('path');
+const sessions = {};
+const qrCodes = {};
 
-  const authPath = path.resolve(__dirname, `../whatsapp/auth/${sessionId}.json`);
-  const { state, saveState } = await useSingleFileAuthState(authPath);
+async function startSession(sessionId) {
+  const sessionPath = path.resolve(__dirname, '..', 'auth', sessionId);
+  const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
   const { version } = await fetchLatestBaileysVersion();
 
   const sock = makeWASocket({
@@ -16,47 +16,40 @@ const startSession = async (sessionId, io) => {
     printQRInTerminal: false,
   });
 
-  sock.ev.on('creds.update', saveState);
-  sock.ev.on('connection.update', (update) => {
-    const { connection, qr } = update;
+  sessions[sessionId] = sock;
 
+  sock.ev.on('creds.update', saveCreds);
+
+  sock.ev.on('connection.update', ({ connection, qr }) => {
     if (qr) {
-      sessions.get(sessionId).qr = qr;
+      qrCodes[sessionId] = qr;
+      console.log(`📱 Novo QR Code para sessão ${sessionId}`);
     }
 
     if (connection === 'open') {
-      sessions.get(sessionId).status = 'CONNECTED';
+      console.log(`✅ Sessão ${sessionId} conectada!`);
     } else if (connection === 'close') {
-      sessions.get(sessionId).status = 'DISCONNECTED';
+      console.log(`🔁 Sessão ${sessionId} desconectada. Tentando reconectar...`);
+      startSession(sessionId);
     }
   });
 
-  sessions.set(sessionId, {
-    socket: sock,
-    qr: null,
-    status: 'QRCODE'
+  sock.ev.on('messages.upsert', async ({ messages }) => {
+    const msg = messages[0];
+    if (!msg.message) return;
+    const sender = msg.key.remoteJid;
+    const text = msg.message.conversation || msg.message.extendedTextMessage?.text;
+    console.log(`📨 Mensagem de ${sender}: ${text}`);
   });
+}
 
-  return sock;
-};
+function getQRCode(req, res) {
+  const { id } = req.params;
+  const qr = qrCodes[id];
+  if (!qr) return res.status(404).json({ error: 'QR Code não encontrado' });
 
-const getQRCode = async (req, res) => {
-  const sessionId = req.params.id;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
+  res.json({ qrCode: qrUrl });
+}
 
-  if (!sessions.has(sessionId)) {
-    await startSession(sessionId);
-  }
-
-  const session = sessions.get(sessionId);
-  if (!session || !session.qr) {
-    return res.status(404).json({ error: 'QR Code ainda não gerado' });
-  }
-
-  return res.json({ qrCode: `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(session.qr)}` });
-};
-
-module.exports = {
-  getQRCode,
-  startSession,
-  sessions,
-};
+module.exports = { startSession, getQRCode };
