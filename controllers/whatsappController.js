@@ -1,5 +1,9 @@
 const { default: makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
 const path = require('path');
+const { createClient } = require('@supabase/supabase-js');
+
+// Supabase config
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 const sessions = {};
 const qrCodes = {};
@@ -33,16 +37,32 @@ async function startSession(sessionId) {
         qrCodes[sessionId] = qr;
         sessionStatus[sessionId] = 'qr';
         console.log(`📱 Novo QR Code gerado para sessão ${sessionId}`);
+
+        await supabase
+          .from('whatsapp_sessions')
+          .upsert({ session_id: sessionId, status: 'waiting_qr' }, { onConflict: 'session_id' });
       }
 
       if (connection === 'open') {
         sessionStatus[sessionId] = 'connected';
         console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
-      } else if (connection === 'close') {
+
+        await supabase
+          .from('whatsapp_sessions')
+          .upsert({ session_id: sessionId, status: 'connected' }, { onConflict: 'session_id' });
+      }
+
+      if (connection === 'close') {
         sessionStatus[sessionId] = 'disconnected';
         console.log(`⚠️ Sessão ${sessionId} desconectada. Reconectando...`);
+
+        await supabase
+          .from('whatsapp_sessions')
+          .update({ status: 'disconnected' })
+          .eq('session_id', sessionId);
+
         delete sessions[sessionId];
-        await startSession(sessionId); // tenta reconectar automaticamente
+        await startSession(sessionId);
       }
     });
 
@@ -59,6 +79,11 @@ async function startSession(sessionId) {
   } catch (error) {
     console.error(`❌ Erro ao iniciar sessão ${sessionId}:`, error);
     sessionStatus[sessionId] = 'error';
+
+    await supabase
+      .from('whatsapp_sessions')
+      .upsert({ session_id: sessionId, status: 'error' }, { onConflict: 'session_id' });
+
     throw error;
   }
 }
