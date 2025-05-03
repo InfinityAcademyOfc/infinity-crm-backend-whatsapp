@@ -88,7 +88,6 @@ async function startSession(sessionId) {
   }
 }
 
-// Retorna o QR Code em formato de URL
 async function getQRCode(req, res) {
   const sessionId = req.params.id;
 
@@ -104,8 +103,9 @@ async function getQRCode(req, res) {
       return res.status(202).json({ message: 'QR Code ainda não disponível, aguarde...' });
     }
 
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
-    return res.json({ qrCode: qrUrl });
+    // Retorna o QR code em formato base64 embed
+    const base64Qr = qr.startsWith("data:image/png;base64,") ? qr : `data:image/png;base64,${qr}`;
+    return res.json({ qrCode: base64Qr });
 
   } catch (error) {
     console.error(`❌ Erro ao recuperar QR Code da sessão ${sessionId}:`, error);
