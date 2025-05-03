@@ -6,7 +6,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Rotas do Infinity CRM + WhatsApp
+// Rotas gerais do Infinity CRM + WhatsApp
 app.use('/profiles', require('./routes/profiles'));
 app.use('/companies', require('./routes/companies'));
 app.use('/config', require('./routes/config'));
@@ -15,6 +15,8 @@ app.use('/lists', require('./routes/lists'));
 app.use('/schedules', require('./routes/schedules'));
 app.use('/chatbots', require('./routes/chatbots'));
 app.use('/contacts', require('./routes/contacts'));
+
+// ⚠️ Rota de sessões deve vir antes de chamadas do WhatsApp
 app.use('/sessions', require('./routes/sessions'));
 
 // Rotas específicas do módulo WhatsApp
@@ -33,8 +35,4 @@ app.get('/', (req, res) => {
 // Inicialização
 app.listen(process.env.PORT || 3000, () => {
   console.log(`✅ Servidor iniciado: http://localhost:${process.env.PORT || 3000}`);
-  
-  // WhatsApp (Baileys)
-const startWhatsApp = require('./whatsapp');
-startWhatsApp();
 });
