@@ -18,6 +18,12 @@ async function startSession(sessionId) {
 
   try {
     const sessionPath = path.resolve(__dirname, '..', 'whatsapp', 'auth', sessionId);
+    
+    const fs = require('fs');
+    if (!fs.existsSync(sessionPath)) {
+      fs.mkdirSync(sessionPath, { recursive: true });
+    }
+
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const { version } = await fetchLatestBaileysVersion();
 
