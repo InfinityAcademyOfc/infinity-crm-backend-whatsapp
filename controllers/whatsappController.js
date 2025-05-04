@@ -18,12 +18,18 @@ async function startSession(sessionId) {
   }
 
   try {
-    const sessionPath = path.resolve(__dirname, '..', 'whatsapp', 'auth', sessionId);
-    
-    // Garante que a pasta da sessão existe
+    // Verifica se está em ambiente Render ou local
+    const isRender = process.env.RENDER === 'true' || process.env.RENDER_EXTERNAL_URL;
+    const basePath = isRender
+      ? path.resolve('/tmp', 'auth')  // Render usa /tmp
+      : path.resolve(__dirname, '..', 'whatsapp', 'auth'); // Local padrão
+
+    const sessionPath = path.resolve(basePath, sessionId);
+    console.log(`📁 Caminho da sessão (${isRender ? 'RENDER' : 'LOCAL'}):`, sessionPath);
+
     if (!fs.existsSync(sessionPath)) {
       fs.mkdirSync(sessionPath, { recursive: true });
-      console.log(`📁 Pasta de sessão criada: ${sessionPath}`);
+      console.log(`✅ Pasta criada para sessão: ${sessionPath}`);
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
@@ -40,7 +46,7 @@ async function startSession(sessionId) {
 
     sock.ev.on('creds.update', saveCreds);
 
-    sock.ev.on('connection.update', async ({ connection, qr, lastDisconnect }) => {
+    sock.ev.on('connection.update', async ({ connection, qr }) => {
       if (qr) {
         qrCodes[sessionId] = qr;
         sessionStatus[sessionId] = 'qr';
@@ -62,7 +68,6 @@ async function startSession(sessionId) {
 
       if (connection === 'close') {
         sessionStatus[sessionId] = 'disconnected';
-
         console.warn(`⚠️ Sessão ${sessionId} foi desconectada. Reconectando...`);
 
         await supabase
@@ -72,7 +77,6 @@ async function startSession(sessionId) {
 
         delete sessions[sessionId];
 
-        // Espera um pouco antes de tentar reconectar
         setTimeout(() => startSession(sessionId), 3000);
       }
     });
@@ -91,8 +95,6 @@ async function startSession(sessionId) {
     sessionStatus[sessionId] = 'error';
 
     console.error(`❌ Erro ao iniciar sessão ${sessionId}:`, error.message);
-    console.error(error.stack);
-
     await supabase
       .from('whatsapp_sessions')
       .upsert({ session_id: sessionId, status: 'error' }, { onConflict: 'session_id' });
