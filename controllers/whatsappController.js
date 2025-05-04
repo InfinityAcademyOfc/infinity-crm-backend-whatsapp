@@ -32,6 +32,9 @@ async function startSession(sessionId) {
       console.log(`✅ Pasta criada para sessão: ${sessionPath}`);
     }
 
+    console.log(`📁 Verificando permissão de escrita em ${sessionPath}`);
+    fs.writeFileSync(path.join(sessionPath, 'test.txt'), 'teste');
+    
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const { version } = await fetchLatestBaileysVersion();
 
