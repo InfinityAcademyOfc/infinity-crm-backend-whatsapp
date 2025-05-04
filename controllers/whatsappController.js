@@ -64,10 +64,19 @@ async function startSession(sessionId) {
         sessionStatus[sessionId] = 'connected';
         console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
 
+        const user = sock.user || {};
+        console.log("👤 Dados do usuário conectado:", user);
+
         await supabase
           .from('whatsapp_sessions')
-          .upsert({ session_id: sessionId, status: 'connected' }, { onConflict: 'session_id' });
+          .upsert({
+            session_id: sessionId,
+            status: 'connected',
+            phone: user.id || null,
+            name: user.name || null
+          }, { onConflict: 'session_id' });
       }
+
 
       if (connection === 'close') {
         sessionStatus[sessionId] = 'disconnected';
@@ -84,7 +93,16 @@ async function startSession(sessionId) {
       }
     });
 
-    sock.ev.on('messages.upsert', async ({ messages }) => {
+    sock.ev.on('messages.upsert', async ({ messages }) => { 
+      sock.ev.on('creds.update', async () => { // <- NÃO usar por enquanto
+        try {
+          await saveCreds();
+          console.log(`💾 Credenciais salvas com sucesso para sessão ${sessionId}`);
+        } catch (err) {
+          console.error(`❌ Erro ao salvar credenciais da sessão ${sessionId}:`, err.message);
+        }
+      });
+
       const msg = messages[0];
       if (!msg.message) return;
 
