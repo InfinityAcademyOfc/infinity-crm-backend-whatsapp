@@ -50,7 +50,7 @@ async function startSession(sessionId) {
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async ({ connection, qr }) => {
-      if (qr) {
+      if (qr && sessionStatus[sessionId] !== 'connected') {
         qrCodes[sessionId] = qr;
         sessionStatus[sessionId] = 'qr';
         console.log(`📱 Novo QR Code gerado para sessão ${sessionId}`);
