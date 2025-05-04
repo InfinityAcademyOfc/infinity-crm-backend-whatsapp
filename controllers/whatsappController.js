@@ -47,62 +47,70 @@ async function startSession(sessionId) {
     sessions[sessionId] = sock;
     sessionStatus[sessionId] = 'starting';
 
-    sock.ev.on('creds.update', saveCreds);
-
-    sock.ev.on('connection.update', async ({ connection, qr }) => {
-      if (qr && sessionStatus[sessionId] !== 'connected') {
-        qrCodes[sessionId] = qr;
-        sessionStatus[sessionId] = 'qr';
-        console.log(`📱 Novo QR Code gerado para sessão ${sessionId}`);
-
-        await supabase
-          .from('whatsapp_sessions')
-          .upsert({ session_id: sessionId, status: 'qr' }, { onConflict: 'session_id' });
-      }
-
-      if (connection === 'open') {
-        sessionStatus[sessionId] = 'connected';
-        console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
-
-        const user = sock.user || {};
-        console.log("👤 Dados do usuário conectado:", user);
-
-        await supabase
-          .from('whatsapp_sessions')
-          .upsert({
-            session_id: sessionId,
-            status: 'connected',
-            phone: user.id || null,
-            name: user.name || null
-          }, { onConflict: 'session_id' });
-      }
-
-
-      if (connection === 'close') {
-        sessionStatus[sessionId] = 'disconnected';
-        console.warn(`⚠️ Sessão ${sessionId} foi desconectada. Reconectando...`);
-
-        await supabase
-          .from('whatsapp_sessions')
-          .update({ status: 'disconnected' })
-          .eq('session_id', sessionId);
-
-        delete sessions[sessionId];
-
-        setTimeout(() => startSession(sessionId), 3000);
+    sock.ev.on('creds.update', async () => {
+      try {
+        await saveCreds();
+        console.log(`💾 Credenciais salvas com sucesso para sessão ${sessionId}`);
+      } catch (err) {
+        console.error(`❌ Erro ao salvar credenciais da sessão ${sessionId}:`, err.message);
       }
     });
 
-    sock.ev.on('messages.upsert', async ({ messages }) => { 
-      sock.ev.on('creds.update', async () => { // <- NÃO usar por enquanto
-        try {
-          await saveCreds();
-          console.log(`💾 Credenciais salvas com sucesso para sessão ${sessionId}`);
-        } catch (err) {
-          console.error(`❌ Erro ao salvar credenciais da sessão ${sessionId}:`, err.message);
-        }
-      });
+    sock.ev.on('connection.update', async ({ connection, qr }) => {
+       console.log(`🔁 Atualização de conexão para sessão ${sessionId}:`, update);
 
+       const { connection, qr, lastDisconnect } = update;
+      
+      if (qr && sessionStatus[sessionId] !== 'connected') {
+    qrCodes[sessionId] = qr;
+    sessionStatus[sessionId] = 'qr';
+    console.log(`📱 QR Code gerado para ${sessionId}`);
+
+    await supabase
+      .from('whatsapp_sessions')
+      .upsert({ session_id: sessionId, status: 'qr' }, { onConflict: 'session_id' });
+  }
+
+  if (connection === 'open') {
+    sessionStatus[sessionId] = 'connected';
+    console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
+
+    const user = sock.user || {};
+    console.log("👤 Usuário conectado:", user);
+
+    // ⚠️ FORÇA salvar as credenciais
+    try {
+      await saveCreds();
+      console.log(`💾 Credenciais salvas forçadamente para sessão ${sessionId}`);
+    } catch (err) {
+      console.error(`❌ Erro ao forçar salvar credenciais:`, err.message);
+    }
+
+    await supabase
+      .from('whatsapp_sessions')
+      .upsert({
+        session_id: sessionId,
+        status: 'connected',
+        phone: user.id || null,
+        name: user.name || null
+      }, { onConflict: 'session_id' });
+  }
+
+  if (connection === 'close') {
+    sessionStatus[sessionId] = 'disconnected';
+    console.warn(`⚠️ Sessão ${sessionId} desconectada`);
+
+    await supabase
+      .from('whatsapp_sessions')
+      .update({ status: 'disconnected' })
+      .eq('session_id', sessionId);
+
+    delete sessions[sessionId];
+    setTimeout(() => startSession(sessionId), 3000);
+  }
+});
+
+    sock.ev.on('messages.upsert', async ({ messages }) => { 
       const msg = messages[0];
       if (!msg.message) return;
 
