@@ -7,14 +7,7 @@ app.use(cors());
 app.use(express.json());
 
 // Rotas gerais do Infinity CRM + WhatsApp
-app.use('/profiles', require('./routes/profiles'));
-app.use('/companies', require('./routes/companies'));
-app.use('/config', require('./routes/config'));
-app.use('/media', require('./routes/media'));
-app.use('/lists', require('./routes/lists'));
-app.use('/schedules', require('./routes/schedules'));
 app.use('/chatbots', require('./routes/chatbots'));
-app.use('/contacts', require('./routes/contacts'));
 
 // ⚠️ Rota de sessões deve vir antes de chamadas do WhatsApp
 app.use('/sessions', require('./routes/sessions'));
