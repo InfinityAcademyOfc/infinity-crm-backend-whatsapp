@@ -81,16 +81,37 @@ async function startSession(sessionId) {
 
         if (sock.user) {
           const { id, name } = sock.user;
-          await supabase.from('whatsapp_sessions').upsert(
+          const { data, error } = await supabase.from('whatsapp_sessions').upsert(
             {
               session_id: sessionId,
               status: 'connected',
               phone: id || null,
               name: name || null,
+              connected_at: new Date().toISOString(),
             },
             { onConflict: 'session_id' }
           );
+
+          if (error) {
+            console.error('❌ Erro ao salvar sessão no Supabase:', error.message);
+          } else {
+            console.log(`✅ Sessão ${sessionId} salva no Supabase com ID: ${data[0].id}`);
+          }
         }
+
+        // Log para verificar arquivos na pasta auth
+        fs.readdir(sessionPath, (err, files) => {
+          if (err) {
+            console.error('❌ Erro ao listar arquivos da pasta auth:', err);
+          } else {
+            console.log(`📂 Arquivos atuais na pasta auth (${files.length}):`);
+            files.forEach(file => {
+              console.log(`- ${file}`);
+            });
+          }
+        });
+
+        console.log(`✅ Sessão ${sessionId} conectada com sucesso!`);
       }
 
       if (connection === 'close') {
