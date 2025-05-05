@@ -48,20 +48,18 @@ async function startSession(sessionId) {
     sessionStatus[sessionId] = 'starting';
 
     sock.ev.on('creds.update', async () => {
-      try {
-        await saveCreds();
-        console.log(`💾 Credenciais salvas com sucesso para sessão ${sessionId}`);
-      } catch (err) {
-        console.error(`❌ Erro ao salvar credenciais da sessão ${sessionId}:`, err.message);
-      }
-    });
+  try {
+    await saveCreds();
+    console.log(`💾 Credenciais salvas com sucesso para sessão ${sessionId}`);
+  } catch (err) {
+    console.error(`❌ Erro ao salvar credenciais da sessão ${sessionId}:`, err.message);
+  }
+});
 
     sock.ev.on('connection.update', async ({ connection, qr }) => {
-       console.log(`🔁 Atualização de conexão para sessão ${sessionId}:`, update);
+      console.log(`🔁 Atualização de conexão para sessão ${sessionId}:`, update); // ❌ update não está definido
 
-       const { connection, qr, lastDisconnect } = update;
-      
-      if (qr && sessionStatus[sessionId] !== 'connected') {
+  if (qr && sessionStatus[sessionId] !== 'connected') {
     qrCodes[sessionId] = qr;
     sessionStatus[sessionId] = 'qr';
     console.log(`📱 QR Code gerado para ${sessionId}`);
@@ -75,10 +73,7 @@ async function startSession(sessionId) {
     sessionStatus[sessionId] = 'connected';
     console.log(`✅ Sessão ${sessionId} conectada com sucesso`);
 
-    const user = sock.user || {};
-    console.log("👤 Usuário conectado:", user);
-
-    // ⚠️ FORÇA salvar as credenciais
+    // ⚠️ Tenta salvar credenciais manualmente também
     try {
       await saveCreds();
       console.log(`💾 Credenciais salvas forçadamente para sessão ${sessionId}`);
@@ -86,14 +81,19 @@ async function startSession(sessionId) {
       console.error(`❌ Erro ao forçar salvar credenciais:`, err.message);
     }
 
-    await supabase
-      .from('whatsapp_sessions')
-      .upsert({
-        session_id: sessionId,
-        status: 'connected',
-        phone: user.id || null,
-        name: user.name || null
-      }, { onConflict: 'session_id' });
+    if (sock.user) {
+      const user = sock.user;
+      console.log("👤 Usuário conectado:", user);
+
+      await supabase
+        .from('whatsapp_sessions')
+        .upsert({
+          session_id: sessionId,
+          status: 'connected',
+          phone: user.id || null,
+          name: user.name || null
+        }, { onConflict: 'session_id' });
+    }
   }
 
   if (connection === 'close') {
@@ -105,8 +105,8 @@ async function startSession(sessionId) {
       .update({ status: 'disconnected' })
       .eq('session_id', sessionId);
 
-    delete sessions[sessionId];
-    setTimeout(() => startSession(sessionId), 3000);
+    if (!sessions[sessionId]) {
+  setTimeout(() => startSession(sessionId), 3000);
   }
 });
 
