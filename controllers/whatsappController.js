@@ -7,16 +7,19 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY
 
 const sessions = {};
 const qrCodes = {};
-const sessionStatus = {}; // Estados possíveis: not_started | starting | qr | connected | disconnected | error
+const sessionStatus = {}; // not_started | starting | qr | connected | disconnected | error
 
-// Inicia ou recupera uma sessão
 async function startSession(sessionId) {
+  if (!sessionId) throw new Error('ID da sessão é obrigatório.');
+
   if (sessions[sessionId]) {
     console.log(`⚠️ Sessão ${sessionId} já ativa.`);
     return;
   }
 
   try {
+    sessionStatus[sessionId] = 'starting';
+
     const isRender = process.env.RENDER === 'true' || !!process.env.RENDER_EXTERNAL_URL;
     const basePath = isRender
       ? path.resolve('/tmp', 'auth')
@@ -28,8 +31,6 @@ async function startSession(sessionId) {
       console.log(`✅ Pasta criada para sessão: ${sessionPath}`);
     }
 
-    fs.writeFileSync(path.join(sessionPath, 'test.txt'), 'check');
-
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
     const { version } = await fetchLatestBaileysVersion();
 
@@ -40,9 +41,8 @@ async function startSession(sessionId) {
     });
 
     sessions[sessionId] = sock;
-    sessionStatus[sessionId] = 'starting';
 
-    // Credenciais
+    // Credenciais atualizadas
     sock.ev.on('creds.update', async () => {
       try {
         await saveCreds();
@@ -52,10 +52,9 @@ async function startSession(sessionId) {
       }
     });
 
-    // Atualização de conexão
+    // Conexão
     sock.ev.on('connection.update', async (update) => {
       const { connection, qr, lastDisconnect } = update;
-      console.log(`🔄 update conexão: ${sessionId}`, update);
 
       if (qr && sessionStatus[sessionId] !== 'connected') {
         qrCodes[sessionId] = qr;
@@ -70,6 +69,8 @@ async function startSession(sessionId) {
 
       if (connection === 'open') {
         sessionStatus[sessionId] = 'connected';
+        delete qrCodes[sessionId];
+
         console.log(`✅ Conectado: ${sessionId}`);
 
         try {
@@ -109,14 +110,21 @@ async function startSession(sessionId) {
       }
     });
 
-    // Recebe mensagens
+    // Receber mensagens
     sock.ev.on('messages.upsert', async ({ messages }) => {
       const msg = messages[0];
-      if (!msg.message) return;
+      if (!msg || !msg.message) return;
 
       const sender = msg.key.remoteJid;
-      const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+      const text =
+        msg.message?.conversation ||
+        msg.message?.extendedTextMessage?.text ||
+        msg.message?.imageMessage?.caption ||
+        '[mensagem sem texto]';
+
       console.log(`💬 ${sessionId} :: ${sender} => ${text}`);
+
+      // Aqui você pode salvar no Supabase ou acionar o chatbot
     });
 
   } catch (err) {
@@ -132,9 +140,9 @@ async function startSession(sessionId) {
   }
 }
 
-// Retorna QR Code para o frontend
 async function getQRCode(req, res) {
   const sessionId = req.params.id;
+  if (!sessionId) return res.status(400).json({ error: 'ID da sessão é obrigatório' });
 
   try {
     if (!sessions[sessionId]) {
@@ -149,16 +157,15 @@ async function getQRCode(req, res) {
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
     return res.json({ qr: qrUrl });
-
   } catch (err) {
     console.error(`❌ Erro ao obter QR Code: ${err.message}`);
     return res.status(500).json({ error: 'Erro ao obter QR Code', details: err.message });
   }
 }
 
-// Retorna status da sessão (memória ou Supabase)
 async function getSessionStatus(req, res) {
   const { id } = req.params;
+  if (!id) return res.status(400).json({ status: 'invalid_request' });
 
   if (sessionStatus[id]) {
     return res.json({ status: sessionStatus[id] });
