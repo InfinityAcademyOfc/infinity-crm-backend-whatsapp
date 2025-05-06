@@ -87,7 +87,7 @@ async function startSession(sessionId) {
 
         if (sock.user) {
           const { id, name } = sock.user;
-          const { data, error } = await supabase.from('whatsapp_sessions').upsert(
+          const { data, error } = await supabase.from('whatsapp_sessions').select('*').eq('sessionId', sessionId).limit(1);
             {
               session_id: sessionId,
               status: 'connected',
