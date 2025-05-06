@@ -14,21 +14,19 @@ async function startSession(sessionId) {
 
   if (sessions[sessionId]) {
     console.log(`⚠️ Sessão ${sessionId} já ativa.`);
-    return; sessions[sessionId]; // ou return sem fazer nada
+    return;
   }
 
   try {
     sessionStatus[sessionId] = 'starting';
 
     const isRender = process.env.RENDER === 'true' || !!process.env.RENDER_EXTERNAL_URL;
-    const basePath = isRender
-      ? path.resolve('/tmp', 'auth')
-      : path.resolve(__dirname, '..', 'whatsapp', 'auth');
-
+    const basePath = isRender ? path.resolve('/tmp', 'auth') : path.resolve(__dirname, '..', 'whatsapp', 'auth');
     const sessionPath = path.join(basePath, sessionId);
+
     if (!fs.existsSync(sessionPath)) {
       fs.mkdirSync(sessionPath, { recursive: true });
-      console.log(`✅ Pasta criada para sessão: ${sessionPath}`);
+      console.log(`📁 Pasta criada para sessão: ${sessionPath}`);
     }
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
@@ -42,7 +40,6 @@ async function startSession(sessionId) {
 
     sessions[sessionId] = sock;
 
-    // Credenciais atualizadas
     sock.ev.on('creds.update', async () => {
       try {
         await saveCreds();
@@ -52,72 +49,67 @@ async function startSession(sessionId) {
       }
     });
 
-    // Conexão
     sock.ev.on('connection.update', async (update) => {
       const { connection, qr, lastDisconnect } = update;
 
-      if (qr) {
-  // Só atualiza se a sessão ainda não tiver sido marcada como conectada
-  if (sessionStatus[sessionId] !== 'connected') {
-    qrCodes[sessionId] = qr;
-    sessionStatus[sessionId] = 'qr';
+      if (qr && sessionStatus[sessionId] !== 'connected') {
+        qrCodes[sessionId] = qr;
+        sessionStatus[sessionId] = 'qr';
 
-    console.log(`📱 QR gerado: ${sessionId}`);
-    await supabase.from('whatsapp_sessions').upsert(
-      { session_id: sessionId, status: 'qr' },
-      { onConflict: 'session_id' }
-    );
-  } else {
-    console.log(`⚠️ Ignorado QR pois sessão já conectada: ${sessionId}`);
-  }
-}
-
+        console.log(`📱 QR gerado para sessão ${sessionId}`);
+        await supabase.from('whatsapp_sessions').upsert(
+          {
+            session_id: sessionId,
+            status: 'qr',
+            qr_code: qr,
+            is_connected: false,
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'session_id' }
+        );
+      }
 
       if (connection === 'open') {
         sessionStatus[sessionId] = 'connected';
         delete qrCodes[sessionId];
-
         console.log(`✅ Conectado: ${sessionId}`);
 
         try {
           await saveCreds();
         } catch (err) {
-          console.error(`❌ Erro ao salvar creds manualmente: ${err.message}`);
+          console.error(`❌ Erro ao salvar creds: ${err.message}`);
         }
 
         if (sock.user) {
-          const { id, name } = sock.user;
-          const { data, error } = await supabase.from('whatsapp_sessions').select('*').eq('sessionId', sessionId).limit(1);
+          const { id: phone, name } = sock.user;
+          const { error } = await supabase.from('whatsapp_sessions').upsert(
             {
               session_id: sessionId,
               status: 'connected',
-              phone: id || null,
-              name: name || null,
+              is_connected: true,
+              qr_code: null,
               connected_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+              phone,
+              name,
             },
             { onConflict: 'session_id' }
           );
 
           if (error) {
-            console.error('❌ Erro ao salvar sessão no Supabase:', error.message);
+            console.error(`❌ Erro ao salvar sessão no Supabase: ${error.message}`);
           } else {
-            console.log(`✅ Sessão ${sessionId} salva no Supabase com ID: ${data[0].id}`);
+            console.log(`✅ Sessão ${sessionId} atualizada no Supabase.`);
           }
         }
 
-        // Log para verificar arquivos na pasta auth
         fs.readdir(sessionPath, (err, files) => {
-          if (err) {
-            console.error('❌ Erro ao listar arquivos da pasta auth:', err);
-          } else {
-            console.log(`📂 Arquivos atuais na pasta auth (${files.length}):`);
-            files.forEach(file => {
-              console.log(`- ${file}`);
-            });
+          if (err) console.error('❌ Erro ao ler pasta auth:', err);
+          else {
+            console.log(`📂 Pasta auth (${sessionId}) contém ${files.length} arquivos:`);
+            files.forEach(f => console.log(` - ${f}`));
           }
         });
-
-        console.log(`✅ Sessão ${sessionId} conectada com sucesso!`);
       }
 
       if (connection === 'close') {
@@ -125,7 +117,7 @@ async function startSession(sessionId) {
         console.warn(`⚠️ Desconectado: ${sessionId}`);
 
         await supabase.from('whatsapp_sessions')
-          .update({ status: 'disconnected' })
+          .update({ status: 'disconnected', is_connected: false, updated_at: new Date().toISOString() })
           .eq('session_id', sessionId);
 
         delete sessions[sessionId];
@@ -137,7 +129,6 @@ async function startSession(sessionId) {
       }
     });
 
-    // Receber mensagens
     sock.ev.on('messages.upsert', async ({ messages }) => {
       const msg = messages[0];
       if (!msg || !msg.message) return;
@@ -150,20 +141,17 @@ async function startSession(sessionId) {
         '[mensagem sem texto]';
 
       console.log(`💬 ${sessionId} :: ${sender} => ${text}`);
-
-      // Aqui você pode salvar no Supabase ou acionar o chatbot
+      // Aqui você pode salvar no Supabase ou rodar o chatbot
     });
 
   } catch (err) {
     sessionStatus[sessionId] = 'error';
-    console.error(`❌ Erro ao iniciar sessão ${sessionId}:`, err);
+    console.error(`❌ Erro na sessão ${sessionId}:`, err);
 
     await supabase.from('whatsapp_sessions').upsert(
-      { session_id: sessionId, status: 'error' },
+      { session_id: sessionId, status: 'error', updated_at: new Date().toISOString() },
       { onConflict: 'session_id' }
     );
-
-    throw err;
   }
 }
 
@@ -173,20 +161,18 @@ async function getQRCode(req, res) {
 
   try {
     if (!sessions[sessionId]) {
-      console.log(`🚀 Iniciando nova sessão ${sessionId}`);
+      console.log(`🚀 Iniciando nova sessão: ${sessionId}`);
       await startSession(sessionId);
     }
 
     const qr = qrCodes[sessionId];
-    if (!qr) {
-      return res.status(202).json({ message: 'QR Code ainda não disponível, aguarde...' });
-    }
+    if (!qr) return res.status(202).json({ message: 'QR Code não disponível ainda' });
 
     const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qr)}&size=300x300`;
     return res.json({ qr: qrUrl });
   } catch (err) {
-    console.error(`❌ Erro ao obter QR Code: ${err.message}`);
-    return res.status(500).json({ error: 'Erro ao obter QR Code', details: err.message });
+    console.error(`❌ Erro ao buscar QR: ${err.message}`);
+    return res.status(500).json({ error: 'Erro ao gerar QR code', details: err.message });
   }
 }
 
@@ -194,9 +180,7 @@ async function getSessionStatus(req, res) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ status: 'invalid_request' });
 
-  if (sessionStatus[id]) {
-    return res.json({ status: sessionStatus[id] });
-  }
+  if (sessionStatus[id]) return res.json({ status: sessionStatus[id] });
 
   try {
     const { data, error } = await supabase
@@ -205,14 +189,13 @@ async function getSessionStatus(req, res) {
       .eq('session_id', id)
       .single();
 
-    if (error) {
-      console.error(`❌ Erro Supabase status ${id}:`, error.message);
-      return res.status(500).json({ status: 'error' });
+    if (error || !data) {
+      return res.status(404).json({ status: 'not_started' });
     }
 
-    return res.json({ status: data?.status || 'not_started' });
+    return res.json({ status: data.status });
   } catch (err) {
-    console.error(`❌ Erro geral ao obter status: ${err.message}`);
+    console.error(`❌ Erro ao buscar status: ${err.message}`);
     return res.status(500).json({ status: 'error' });
   }
 }
@@ -220,5 +203,5 @@ async function getSessionStatus(req, res) {
 module.exports = {
   startSession,
   getQRCode,
-  getSessionStatus
+  getSessionStatus,
 };
