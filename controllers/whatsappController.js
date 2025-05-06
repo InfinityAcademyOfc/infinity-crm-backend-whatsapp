@@ -14,7 +14,7 @@ async function startSession(sessionId) {
 
   if (sessions[sessionId]) {
     console.log(`⚠️ Sessão ${sessionId} já ativa.`);
-    return;
+    return; sessions[sessionId]; // ou return sem fazer nada
   }
 
   try {
