@@ -56,16 +56,22 @@ async function startSession(sessionId) {
     sock.ev.on('connection.update', async (update) => {
       const { connection, qr, lastDisconnect } = update;
 
-      if (qr && sessionStatus[sessionId] !== 'connected') {
-        qrCodes[sessionId] = qr;
-        sessionStatus[sessionId] = 'qr';
+      if (qr) {
+  // Só atualiza se a sessão ainda não tiver sido marcada como conectada
+  if (sessionStatus[sessionId] !== 'connected') {
+    qrCodes[sessionId] = qr;
+    sessionStatus[sessionId] = 'qr';
 
-        console.log(`📱 QR gerado: ${sessionId}`);
-        await supabase.from('whatsapp_sessions').upsert(
-          { session_id: sessionId, status: 'qr' },
-          { onConflict: 'session_id' }
-        );
-      }
+    console.log(`📱 QR gerado: ${sessionId}`);
+    await supabase.from('whatsapp_sessions').upsert(
+      { session_id: sessionId, status: 'qr' },
+      { onConflict: 'session_id' }
+    );
+  } else {
+    console.log(`⚠️ Ignorado QR pois sessão já conectada: ${sessionId}`);
+  }
+}
+
 
       if (connection === 'open') {
         sessionStatus[sessionId] = 'connected';
