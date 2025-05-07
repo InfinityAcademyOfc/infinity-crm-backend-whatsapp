@@ -4,7 +4,7 @@ const supabase = require('../supabase');
 
 // Buscar todas mensagens
 router.get('/', async (req, res) => {
-  const { data, error } = await supabase.from('messages').select('*');
+  const { data, error } = await supabase.from('whatsapp_messages').select('*');
   if (error) return res.status(500).json(error);
   res.json(data);
 });
@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
 // Criar nova mensagem
 router.post('/', async (req, res) => {
   const { from, to, content, type, status } = req.body;
-  const { data, error } = await supabase.from('messages').insert([
+  const { data, error } = await supabase.from('whatsapp_messages').insert([
     { from, to, content, type, status }
   ]);
   if (error) return res.status(500).json(error);
