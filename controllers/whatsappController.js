@@ -176,24 +176,23 @@ async function getSessionStatus(req, res) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ status: 'invalid_request' });
 
-  if (sessionStatus[id]) {
-    return res.json({ status: sessionStatus[id] });
-  }
-
   try {
     const { data, error } = await supabase
-  .from('whatsapp_sessions')
-  .select('status')
-  .eq('session_id', id)
-  .order('created_at', { ascending: true }) // mais antigo primeiro
-  .limit(1);
+      .from('whatsapp_sessions')
+      .select('status')
+      .eq('session_id', id)
+      .limit(1)
+      .maybeSingle();
 
-    if (error || !data || data.length === 0) {
-  console.error(`❌ Erro Supabase status ${id}:`, error?.message || 'nenhum dado encontrado');
-  return res.status(500).json({ status: 'error' });
-}
+    if (error) {
+      console.error(`❌ Erro Supabase status ${id}:`, error.message);
+      return res.status(500).json({ status: 'error' });
+    }
 
-return res.json({ status: data[0].status || 'not_started' });
+    return res.json({ status: data?.status || 'not_started' });
+  } catch (err) {
+    console.error(`❌ Erro ao obter status: ${err.message}`);
+    return res.status(500).json({ status: 'error' });
   }
 }
 
