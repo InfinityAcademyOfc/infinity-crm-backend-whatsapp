@@ -175,20 +175,18 @@ async function getSessionStatus(req, res) {
 
   try {
     const { data, error } = await supabase
-      .from('whatsapp_sessions')
-      .select('status')
-      .eq('session_id', id)
-      .single();
+  .from('whatsapp_sessions')
+  .select('status')
+  .eq('session_id', id)
+  .order('created_at', { ascending: true }) // mais antigo primeiro
+  .limit(1);
 
-    if (error) {
-      console.error(`❌ Erro Supabase status ${id}:`, error.message);
-      return res.status(500).json({ status: 'error' });
-    }
+    if (error || !data || data.length === 0) {
+  console.error(`❌ Erro Supabase status ${id}:`, error?.message || 'nenhum dado encontrado');
+  return res.status(500).json({ status: 'error' });
+}
 
-    return res.json({ status: data?.status || 'not_started' });
-  } catch (err) {
-    console.error(`❌ Erro ao obter status: ${err.message}`);
-    return res.status(500).json({ status: 'error' });
+return res.json({ status: data[0].status || 'not_started' });
   }
 }
 
