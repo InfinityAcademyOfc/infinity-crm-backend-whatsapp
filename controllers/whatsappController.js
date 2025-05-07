@@ -52,70 +52,77 @@ async function startSession(sessionId) {
     });
 
     sock.ev.on('connection.update', async (update) => {
-      const { connection, qr, lastDisconnect } = update;
+  const { connection, qr, lastDisconnect } = update;
 
-      if (qr && sessionStatus[sessionId] !== 'connected') {
-        qrCodes[sessionId] = qr;
-        sessionStatus[sessionId] = 'qr';
+  if (qr && sessionStatus[sessionId] !== 'connected') {
+    qrCodes[sessionId] = qr;
+    sessionStatus[sessionId] = 'qr';
 
-        console.log(`📱 QR gerado: ${sessionId}`);
-        await supabase.from('whatsapp_sessions').upsert(
-          { session_id: sessionId, status: 'qr', qr_code: qr, updated_at: new Date().toISOString() },
-          { onConflict: 'session_id' }
-        );
+    console.log(`📱 QR gerado: ${sessionId}`);
+    await supabase.from('whatsapp_sessions').upsert(
+      {
+        session_id: sessionId,
+        status: 'qr',
+        qr_code: qr,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'session_id' }
+    );
+  }
+
+  if (connection === 'open') {
+    sessionStatus[sessionId] = 'connected';
+    delete qrCodes[sessionId];
+
+    console.log(`✅ Conectado: ${sessionId}`);
+    try {
+      await saveCreds();
+    } catch (err) {
+      console.error(`❌ Erro ao salvar creds: ${err.message}`);
+    }
+
+    if (sock.user) {
+      const { id, name } = sock.user;
+      const { error } = await supabase.from('whatsapp_sessions').upsert(
+        {
+          session_id: sessionId,
+          phone: id || null,
+          name: name || null,
+          status: 'connected',
+          is_connected: true,
+          connected_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'session_id' }
+      );
+
+      if (error) {
+        console.error(`❌ Erro ao salvar sessão no Supabase:`, error.message);
       }
+    }
+  }
 
-      if (connection === 'open') {
-        sessionStatus[sessionId] = 'connected';
-        delete qrCodes[sessionId];
+  if (connection === 'close') {
+    sessionStatus[sessionId] = 'disconnected';
+    console.warn(`⚠️ Desconectado: ${sessionId}`);
 
-        console.log(`✅ Conectado: ${sessionId}`);
-        try {
-          await saveCreds();
-        } catch (err) {
-          console.error(`❌ Erro ao salvar creds: ${err.message}`);
-        }
+    await supabase.from('whatsapp_sessions')
+      .update({
+        status: 'disconnected',
+        is_connected: false,
+        updated_at: new Date().toISOString()
+      })
+      .eq('session_id', sessionId);
 
-        if (sock.user) {
-          const { id, name } = sock.user;
+    delete sessions[sessionId];
 
-          const { error } = await supabase.from('whatsapp_sessions').upsert(
-            {
-              session_id: sessionId,
-              status: 'connected',
-              phone: id || null,
-              name: name || null,
-              connected_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-              is_connected: true
-            },
-            { onConflict: 'session_id' }
-          );
+    setTimeout(() => {
+      console.log(`🔁 Reiniciando sessão ${sessionId} em 3s`);
+      startSession(sessionId);
+    }, 3000);
+  }
+});
 
-          if (error) {
-            console.error('❌ Erro ao salvar sessão no Supabase:', error.message);
-          } else {
-            console.log(`✅ Sessão ${sessionId} salva no Supabase com sucesso.`);
-          }
-        }
-      }
-
-      if (connection === 'close') {
-        sessionStatus[sessionId] = 'disconnected';
-        console.warn(`⚠️ Desconectado: ${sessionId}`);
-
-        await supabase.from('whatsapp_sessions')
-          .update({ status: 'disconnected', updated_at: new Date().toISOString(), is_connected: false })
-          .eq('session_id', sessionId);
-
-        delete sessions[sessionId];
-
-        setTimeout(() => {
-          console.log(`🔁 Reiniciando sessão ${sessionId} em 3s`);
-          startSession(sessionId);
-        }, 3000);
-      }
-    });
 
     sock.ev.on('messages.upsert', async ({ messages }) => {
       const msg = messages[0];
