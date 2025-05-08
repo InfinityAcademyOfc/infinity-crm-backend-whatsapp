@@ -50,7 +50,7 @@ async function startSession(sessionId) {
       qrCodes[sessionId] = qr;
       sessionStatus[sessionId] = 'qr';
       console.log(`📱 QR gerado: ${sessionId}`);
-      return; // ⚠️ Não salvar no Supabase ainda
+      return;
     }
 
     if (connection === 'open') {
@@ -60,18 +60,15 @@ async function startSession(sessionId) {
 
       if (sock.user) {
         const { id, name } = sock.user;
-        await supabase.from('whatsapp_sessions').upsert(
-          {
-            session_id: sessionId,
-            phone: id || null,
-            name: name || null,
-            status: 'connected',
-            is_connected: true,
-            connected_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          },
-          { onConflict: 'session_id' }
-        );
+        await supabase.from('whatsapp_sessions').upsert({
+          session_id: sessionId,
+          phone: id || null,
+          name: name || null,
+          status: 'connected',
+          is_connected: true,
+          connected_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'session_id' });
         console.log(`✅ Conectado: ${sessionId}`);
       }
     }
@@ -102,11 +99,10 @@ async function startSession(sessionId) {
 
   sock.ev.on('messages.upsert', async ({ messages }) => {
     const msg = messages[0];
-    if (!msg?.message) return;
+    if (!msg?.message || !msg.key.remoteJid) return;
 
     const sender = msg.key.remoteJid;
-    const text =
-      msg.message?.conversation ||
+    const text = msg.message?.conversation ||
       msg.message?.extendedTextMessage?.text ||
       msg.message?.imageMessage?.caption ||
       '[sem texto]';
@@ -181,19 +177,24 @@ async function getSessionStatus(req, res) {
   }
 }
 
-const fs = require('fs');
-const path = require('path');
-
 async function deleteSession(req, res) {
   const { id: sessionId } = req.params;
   if (!sessionId) return res.status(400).json({ error: 'ID da sessão é obrigatório.' });
 
   try {
-    // Apaga registros no Supabase
+    if (sessions[sessionId]) {
+      try {
+        await sessions[sessionId].logout(); // força logout via Baileys
+        sessions[sessionId].end(); // encerra conexão
+        delete sessions[sessionId];
+      } catch (e) {
+        console.warn(`⚠️ Erro ao encerrar conexão: ${e.message}`);
+      }
+    }
+
     await supabase.from('whatsapp_sessions').delete().eq('session_id', sessionId);
     await supabase.from('whatsapp_messages').delete().eq('session_id', sessionId);
 
-    // Apaga pasta local (Render usa /tmp)
     const basePath = process.env.RENDER ? path.resolve('/tmp', 'auth') : path.resolve(__dirname, '..', 'whatsapp', 'auth');
     const sessionPath = path.join(basePath, sessionId);
     if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
@@ -210,5 +211,5 @@ module.exports = {
   startSession,
   getQRCode,
   getSessionStatus,
-  deleteSession // 👈 não esqueça de exportar!
+  deleteSession
 };
