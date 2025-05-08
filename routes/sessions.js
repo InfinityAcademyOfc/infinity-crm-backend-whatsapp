@@ -55,4 +55,10 @@ router.get('/:id/status', async (req, res) => {
   }
 });
 
+const express = require('express');
+const router = express.Router();
+const { deleteSession } = require('../controllers/whatsappController');
+
+router.delete('/:id', deleteSession);
+
 module.exports = router;
