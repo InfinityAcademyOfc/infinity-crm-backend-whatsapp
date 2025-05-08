@@ -11,6 +11,7 @@ app.use('/chatbots', require('./routes/chatbots'));
 
 // ⚠️ Rota de sessões deve vir antes de chamadas do WhatsApp
 app.use('/sessions', require('./routes/sessions'));
+app.use('/messages', require('./routes/send_message')); // ou ajuste o caminho se necessário
 
 // Rotas específicas do módulo WhatsApp
 app.use('/whatsapp_contacts', require('./routes/whatsapp_contacts'));
