@@ -105,8 +105,32 @@ async function startSession(sessionId) {
     if (!msg?.message) return;
 
     const sender = msg.key.remoteJid;
-    const text = msg.message?.conversation || msg.message?.extendedTextMessage?.text || msg.message?.imageMessage?.caption || '[sem texto]';
+    const text =
+      msg.message?.conversation ||
+      msg.message?.extendedTextMessage?.text ||
+      msg.message?.imageMessage?.caption ||
+      '[sem texto]';
+
     console.log(`💬 ${sessionId} :: ${sender} => ${text}`);
+
+    try {
+      const msgData = {
+        session_id: sessionId,
+        number: sender,
+        message: text,
+        from_me: msg.key.fromMe,
+        created_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase.from('whatsapp_messages').insert([msgData]);
+      if (error) {
+        console.error("❌ Erro ao salvar mensagem no Supabase:", error.message);
+      } else {
+        console.log("💾 Mensagem salva no Supabase:", text);
+      }
+    } catch (err) {
+      console.error("❌ Erro geral ao salvar mensagem:", err.message);
+    }
   });
 }
 
