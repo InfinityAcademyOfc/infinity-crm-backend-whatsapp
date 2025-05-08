@@ -181,8 +181,34 @@ async function getSessionStatus(req, res) {
   }
 }
 
+const fs = require('fs');
+const path = require('path');
+
+async function deleteSession(req, res) {
+  const { id: sessionId } = req.params;
+  if (!sessionId) return res.status(400).json({ error: 'ID da sessão é obrigatório.' });
+
+  try {
+    // Apaga registros no Supabase
+    await supabase.from('whatsapp_sessions').delete().eq('session_id', sessionId);
+    await supabase.from('whatsapp_messages').delete().eq('session_id', sessionId);
+
+    // Apaga pasta local (Render usa /tmp)
+    const basePath = process.env.RENDER ? path.resolve('/tmp', 'auth') : path.resolve(__dirname, '..', 'whatsapp', 'auth');
+    const sessionPath = path.join(basePath, sessionId);
+    if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
+
+    console.log(`🗑️ Sessão ${sessionId} removida com sucesso.`);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error("❌ Erro ao excluir sessão:", err.message);
+    return res.status(500).json({ error: 'Erro ao excluir sessão.' });
+  }
+}
+
 module.exports = {
   startSession,
   getQRCode,
-  getSessionStatus
+  getSessionStatus,
+  deleteSession // 👈 não esqueça de exportar!
 };
