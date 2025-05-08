@@ -211,5 +211,6 @@ module.exports = {
   startSession,
   getQRCode,
   getSessionStatus,
-  deleteSession
+  deleteSession,
+  sessions 
 };
