@@ -7,12 +7,8 @@ const {
   deleteSession
 } = require('../controllers/whatsappController');
 
-router.post('/:id/start', startSessionHandler);
-router.get('/:id/qrcode', getQRCode);
-router.get('/:id/status', getSessionStatus);
-router.delete('/:id', deleteSession);
-
-async function startSessionHandler(req, res) {
+// Iniciar uma sessão
+router.post('/:id/start', async (req, res) => {
   const sessionId = req.params.id;
 
   if (!sessionId || typeof sessionId !== 'string') {
@@ -26,6 +22,15 @@ async function startSessionHandler(req, res) {
     console.error(`[ERRO] Iniciando sessão ${sessionId}:`, error.message);
     return res.status(500).json({ error: 'Erro ao iniciar sessão', details: error.message });
   }
-}
+});
+
+// QR Code da sessão
+router.get('/:id/qrcode', getQRCode);
+
+// Status da sessão
+router.get('/:id/status', getSessionStatus);
+
+// Apagar a sessão
+router.delete('/:id', deleteSession);
 
 module.exports = router;
